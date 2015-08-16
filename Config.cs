@@ -2,12 +2,14 @@ using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.IO;
+
 namespace ItemDropLog
 {
 	[JsonObject]
 	public sealed class Config
 	{
 		private static Config instance;
+
 		public static Config Instance
 		{
 			get
@@ -15,12 +17,14 @@ namespace ItemDropLog
 				return Config.instance;
 			}
 		}
+
 		[JsonProperty("ignoredItems")]
 		public IList<string> IgnoredItems
 		{
 			get;
 			set;
 		}
+
 		public Config()
 		{
 			this.IgnoredItems = new List<string>
@@ -36,6 +40,7 @@ namespace ItemDropLog
 				"Sugar Plum"
 			};
 		}
+
 		public static void CreateInstance(string path)
 		{
 			if (string.IsNullOrEmpty(path) || !File.Exists(path))
@@ -51,6 +56,7 @@ namespace ItemDropLog
 				}
 			}
 		}
+
 		public static void SaveInstance(string path)
 		{
 			if (Config.instance == null)
@@ -61,7 +67,7 @@ namespace ItemDropLog
 			{
 				using (StreamWriter streamWriter = new StreamWriter(stream))
 				{
-					string value = JsonConvert.SerializeObject(Config.instance);
+					string value = JsonConvert.SerializeObject(Config.instance, Formatting.Indented);
 					streamWriter.WriteLine(value);
 				}
 			}

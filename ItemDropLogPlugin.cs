@@ -10,24 +10,35 @@ using Terraria;
 using TerrariaApi.Server;
 using TShockAPI;
 using TShockAPI.DB;
+
 namespace ItemDropLog
 {
 	[ApiVersion(1, 21)]
 	public class ItemDropLogPlugin : TerrariaPlugin
 	{
 		private static readonly string ConfigPath = Path.Combine(TShock.SavePath, "itemdroplog.json");
+
 		private object _dropLocker;
+
 		private ItemDrop[] _drops;
+
 		private object _pendingLocker;
+
 		private IList<ItemDrop> _playerDropsPending;
+
 		private IList<Item> _ignoredItems;
+
+
+
+
 		public override string Author
 		{
 			get
 			{
-				return "IcyTerraria";
+				return "Originally from PhoenixICE & reinovated by Hiarni";
 			}
 		}
+
 		public override string Name
 		{
 			get
@@ -35,20 +46,23 @@ namespace ItemDropLog
 				return "Item Drop Logger";
 			}
 		}
+
 		public override string Description
 		{
 			get
 			{
-				return "Item Drop Logger Plugin";
+				return "Item Drop Logger";
 			}
 		}
+
 		public override Version Version
 		{
 			get
 			{
-				return new Version(0, 7, 4);
+				return new Version(0, 7, 5);
 			}
 		}
+
 		public string SavePath
 		{
 			get
@@ -56,16 +70,19 @@ namespace ItemDropLog
 				return TShock.SavePath;
 			}
 		}
-        public static IDbConnection DB;
-		
+
+		internal static IDbConnection db;
+
+
 		public ItemDropLogPlugin(Main game) : base(game)
 		{
-			_dropLocker = new object();
-			_drops = new ItemDrop[Main.item.Length];
-			_pendingLocker = new object();
-			_playerDropsPending = new List<ItemDrop>(Main.item.Length);
-			_ignoredItems = new List<Item>();
+			this._dropLocker = new object();
+			this._drops = new ItemDrop[Main.item.Length];
+			this._pendingLocker = new object();
+			this._playerDropsPending = new List<ItemDrop>(Main.item.Length);
+			this._ignoredItems = new List<Item>();
 		}
+
 		public override void Initialize()
 		{
 			ServerApi.Hooks.GameInitialize.Register(this, OnInitialize);
@@ -73,6 +90,7 @@ namespace ItemDropLog
 			ServerApi.Hooks.NetGetData.Register(this, OnGetData);
 			ServerApi.Hooks.NetSendData.Register(this, OnSendData);
 		}
+
 		protected override void Dispose(bool disposing)
 		{
 			if (disposing)
@@ -84,73 +102,65 @@ namespace ItemDropLog
 			}
 			base.Dispose(disposing);
 		}
-        private void OnInitialize(EventArgs args)
-        {
-            Commands.ChatCommands.Add(new Command("playeritemhistory.search", new CommandDelegate(PlayerItemHistoryReceive), new string[]
-            {
-                "pihr"
-            }));
-            Commands.ChatCommands.Add(new Command("playeritemhistory.search", new CommandDelegate(PlayerItemHistoryGive), new string[]
-            {
-                "pihg"
-            }));
-            Commands.ChatCommands.Add(new Command("playeritemhistory.reload", new CommandDelegate(PlayerItemHistoryReload), new string[]
-            {
-                "pihreload"
-            }));
-            Commands.ChatCommands.Add(new Command("playeritemhistory.flush", new CommandDelegate(PlayerItemHistoryFlush), new string[]
-            {
-                "pihflush"
-            }));
-        
-            switch (TShock.Config.StorageType.ToLower())
-            {
-                case "mysql":
-                    string[] host = TShock.Config.MySqlHost.Split(':');
-                    DB = new MySqlConnection()
-                    {
-                        ConnectionString = string.Format("Server={0}; Port={1}; Database={2}; Uid={3}; Pwd={4};",
-                            host[0],
-                            host.Length == 1 ? "3306" : host[1],
-                            TShock.Config.MySqlDbName,
-                            TShock.Config.MySqlUsername,
-                            TShock.Config.MySqlPassword)
-                    };
-                    break;
-                case "sqlite":
-                    string sql = Path.Combine(TShock.SavePath, "ItemLog.sqlite");
-                    DB = new SqliteConnection(string.Format("uri=file://{0},Version=3", sql));
-                    break;
-            }
-            SqlTableCreator sqlcreator = new SqlTableCreator(DB,
-                DB.GetSqlType() == SqlType.Sqlite ? (IQueryBuilder)new SqliteQueryCreator() : new MysqlQueryCreator());
-            sqlcreator.EnsureTableStructure(new SqlTable("ItemLog",
-                                    new SqlColumn("ID", MySqlDbType.Int32) { Unique = true, Primary = true },
-                                    new SqlColumn("Timestamp", MySqlDbType.String, 19),
-                                    new SqlColumn("ServerName", MySqlDbType.String, 64),
-                                    new SqlColumn("SourcePlayerName", MySqlDbType.String, 30),
-                                    new SqlColumn("SourceIP", MySqlDbType.String, 16),
-                                    new SqlColumn("TargetPlayerName", MySqlDbType.String, 30),
-                                    new SqlColumn("TargetIP", MySqlDbType.String, 16),
-                                    new SqlColumn("Action", MySqlDbType.String, 16),
-                                    new SqlColumn("DropX", MySqlDbType.Int32),
-                                    new SqlColumn("DropY", MySqlDbType.Int32),
-                                    new SqlColumn("ItemNetId", MySqlDbType.Int32),
-                                    new SqlColumn("ItemName", MySqlDbType.String, 70),
-                                    new SqlColumn("ItemStack", MySqlDbType.Int32),
-                                    new SqlColumn("ItemPrefix", MySqlDbType.Int32),
-                                    new SqlColumn("PlayerDrop", MySqlDbType.Int32),
-                                    new SqlColumn("Pickup", MySqlDbType.Int32)
-                                    ));
-        }
 
-        private void OnPostInitialize(EventArgs args)
+		private void OnInitialize(EventArgs args)
 		{
-			SetupConfig();
+			Commands.ChatCommands.Add(new Command("droplog.search", PlayerItemHistoryReceive, "lr") { AllowServer = true });
+			Commands.ChatCommands.Add(new Command("droplog.search", PlayerItemHistoryGive, "lg") { AllowServer = true });
+			Commands.ChatCommands.Add(new Command("droplog.reload", PlayerItemHistoryReload, "lreload") { AllowServer = true });
+			Commands.ChatCommands.Add(new Command("droplog.flush", PlayerItemHistoryFlush, "lflush") { AllowServer = true });
+
+			switch (TShock.Config.StorageType.ToLower())
+			{
+				case "mysql":
+					{
+						string[] dbHost = TShock.Config.MySqlHost.Split(':');
+						db = new MySqlConnection()
+						{
+							ConnectionString = string.Format("Server={0}; Port={1}; Database={2}; Uid={3}; Pwd={4};",
+									dbHost[0],
+									dbHost.Length == 1 ? "3306" : dbHost[1],
+									TShock.Config.MySqlDbName,
+									TShock.Config.MySqlUsername,
+									TShock.Config.MySqlPassword)
+						};
+						break;
+					}
+				case "sqlite":
+					{
+						string sql = Path.Combine(TShock.SavePath, "ItemLog.sqlite");
+						db = new SqliteConnection(string.Format("uri=file://{0},Version=3", sql));
+						break;
+					}
+			}
+			SqlTableCreator sqlcreator = new SqlTableCreator(db, db.GetSqlType() == SqlType.Sqlite ? (IQueryBuilder)new SqliteQueryCreator() : new MysqlQueryCreator());
+
+			sqlcreator.EnsureTableStructure(new SqlTable("ItemLog",
+									new SqlColumn("ID", MySqlDbType.Int32) { Unique = true, Primary = true },
+									new SqlColumn("Timestamp", MySqlDbType.String, 19),
+									new SqlColumn("ServerName", MySqlDbType.String, 64),
+									new SqlColumn("SourcePlayerName", MySqlDbType.String, 30),
+									new SqlColumn("SourceIP", MySqlDbType.String, 16),
+									new SqlColumn("TargetPlayerName", MySqlDbType.String, 30),
+									new SqlColumn("TargetIP", MySqlDbType.String, 16),
+									new SqlColumn("Action", MySqlDbType.String, 16),
+									new SqlColumn("DropX", MySqlDbType.Int32),
+									new SqlColumn("DropY", MySqlDbType.Int32),
+									new SqlColumn("ItemNetId", MySqlDbType.Int32),
+									new SqlColumn("ItemName", MySqlDbType.String, 70),
+									new SqlColumn("ItemStack", MySqlDbType.Int32),
+									new SqlColumn("ItemPrefix", MySqlDbType.Int32)
+									));
 		}
+
+		private void OnPostInitialize(EventArgs args)
+		{
+			this.SetupConfig();
+		}
+
 		private void OnGetData(GetDataEventArgs args)
 		{
-			if ((int)args.MsgID == 21)
+			if ((int)args.MsgID == (int)PacketTypes.ItemDrop)
 			{
 				TSPlayer tSPlayer = TShock.Players[args.Msg.whoAmI];
 				using (MemoryStream memoryStream = new MemoryStream(args.Msg.readBuffer, args.Index, args.Length))
@@ -171,13 +181,15 @@ namespace ItemDropLog
 							Item itemById = TShock.Utils.GetItemById(num6);
 							string name = tSPlayer.Name;
 							string sourceIP = tSPlayer.IP.Split(new char[]
-							{':'})[0];
-							lock (_pendingLocker)
+							{
+								':'
+							})[0];
+							lock (this._pendingLocker)
 							{
 								float dropX = num2 / 16f;
 								float dropY = num3 / 16f;
-								_playerDropsPending.Add(new ItemDrop(name, itemById.netID, num4, num5, dropX, dropY));
-								if (CheckItem(itemById))
+								this._playerDropsPending.Add(new ItemDrop(name, itemById.netID, num4, num5, dropX, dropY));
+								if (this.CheckItem(itemById))
 								{
 									ItemDropLogger.CreateItemEntry(new ItemDropLogInfo("PlayerDrop", name, string.Empty, itemById.netID, num4, num5, dropX, dropY)
 									{
@@ -193,20 +205,22 @@ namespace ItemDropLog
 							{
 								string name2 = tSPlayer.Name;
 								string targetIP = tSPlayer.IP.Split(new char[]
-								{':'})[0];
-								lock (_dropLocker)
 								{
-									ItemDrop itemDrop = _drops[num];
-									if (_drops[num] != null && _drops[num].NetworkId != 0)
+									':'
+								})[0];
+								lock (this._dropLocker)
+								{
+									ItemDrop itemDrop = this._drops[num];
+									if (this._drops[num] != null && this._drops[num].NetworkId != 0)
 									{
-										if (CheckItem(item))
+										if (this.CheckItem(item))
 										{
-											ItemDropLogger.UpdateItemEntry(new ItemDropLogInfo("Pickup", itemDrop.SourceName, name2, (int)itemDrop.NetworkId, (int)itemDrop.Stack, (int)itemDrop.Prefix)
+											ItemDropLogger.UpdateItemEntry(new ItemDropLogInfo("Pickup", itemDrop.SourceName, name2, itemDrop.NetworkId, itemDrop.Stack, (int)itemDrop.Prefix)
 											{
 												TargetIP = targetIP
 											});
 										}
-										_drops[num] = null;
+										this._drops[num] = null;
 									}
 								}
 							}
@@ -215,35 +229,37 @@ namespace ItemDropLog
 				}
 			}
 		}
+
 		private void OnSendData(SendDataEventArgs args)
 		{
-			if ((int)args.MsgId != 21)
+			if (args.MsgId != PacketTypes.ItemDrop)
 			{
 				return;
 			}
 			int number = args.number;
-			if (_playerDropsPending.Count > 0 && number < 400)
+			if (this._playerDropsPending.Count > 0 && number < 400)
 			{
 				Item item = Main.item[number];
-				ItemDrop itemDrop = _playerDropsPending.FirstOrDefault((ItemDrop x) => x.NetworkId == item.netID && x.Stack == item.stack && x.Prefix == item.prefix);
+				ItemDrop itemDrop = this._playerDropsPending.FirstOrDefault((ItemDrop x) => x.NetworkId == item.netID && x.Stack == item.stack && x.Prefix == item.prefix);
 				if (itemDrop != null)
 				{
-					lock (_dropLocker)
+					lock (this._dropLocker)
 					{
-						_drops[number] = itemDrop;
+						this._drops[number] = itemDrop;
 					}
-					lock (_pendingLocker)
+					lock (this._pendingLocker)
 					{
-						_playerDropsPending.Remove(itemDrop);
+						this._playerDropsPending.Remove(itemDrop);
 					}
 				}
 			}
 		}
+
 		private void PlayerItemHistoryReceive(CommandArgs args)
 		{
 			if (args.Parameters.Count == 0)
 			{
-				args.Player.SendErrorMessage("Invalid syntax! Proper syntax: /pihr <player> [page] [item id/name]");
+				args.Player.SendErrorMessage("Invalid syntax! Proper syntax: /lr <player> [page] [item id/name]");
 				return;
 			}
 			string text = args.Parameters[0];
@@ -251,10 +267,7 @@ namespace ItemDropLog
 			string text2;
 			if (list.Count == 0)
 			{
-				using (QueryResult queryResult = DbExt.QueryReader(DB, "SELECT COUNT(*) AS `Count` FROM `ItemLog` WHERE `TargetPlayerName`=@0", new object[]
-				{
-					text
-				}))
+				using (QueryResult queryResult = db.QueryReader("SELECT COUNT(*) AS `Count` FROM `ItemLog` WHERE `TargetPlayerName`=@0", text))
 				{
 					if (!queryResult.Read() || queryResult.Get<int>("Count") <= 0)
 					{
@@ -268,11 +281,11 @@ namespace ItemDropLog
 			{
 				text2 = list[0].Name;
 			}
-			TShock.Utils.SendMultipleMatchError(args.Player, 
-				from p in list
-				select p.Name);
-			return;
-			IL_E3:
+			else
+			{
+				TShock.Utils.SendMultipleMatchError(args.Player, from p in list select p.Name);
+				return;
+			}
 			int num;
 			if (args.Parameters.Count < 2 || !int.TryParse(args.Parameters[1], out num) || num < 0)
 			{
@@ -289,9 +302,8 @@ namespace ItemDropLog
 				}
 				if (itemByIdOrName.Count > 1)
 				{
-					TShock.Utils.SendMultipleMatchError(args.Player, 
-						from x in itemByIdOrName
-						select x.name);
+					TShock.Utils.SendMultipleMatchError(args.Player, from x in itemByIdOrName
+					select x.name);
 					return;
 				}
 				item = itemByIdOrName[0];
@@ -299,48 +311,30 @@ namespace ItemDropLog
 			QueryResult queryResult2;
 			if (item != null)
 			{
-				queryResult2 = DbExt.QueryReader(DB, "SELECT * FROM `ItemLog` WHERE `TargetPlayerName`=@0 AND `ItemNetId`=@1 ORDER BY `Timestamp` DESC LIMIT @2,@3", new object[]
-				{
-					text2,
-					item.netID,
-					(num - 1) * 5,
-					5
-				});
+				queryResult2 = db.QueryReader("SELECT * FROM `ItemLog` WHERE `TargetPlayerName`=@0 AND `ItemNetId`=@1 ORDER BY `Timestamp` DESC LIMIT @2,@3", text2, item.netID, (num - 1) * 5, 5);
 			}
 			else
 			{
-				queryResult2 = DbExt.QueryReader(DB, "SELECT * FROM `ItemLog` WHERE `TargetPlayerName`=@0 ORDER BY `Timestamp` DESC LIMIT @1,@2", new object[]
-				{
-					text2,
-					(num - 1) * 5,
-					5
-				});
+				queryResult2 = db.QueryReader("SELECT * FROM `ItemLog` WHERE `TargetPlayerName`=@0 ORDER BY `Timestamp` DESC LIMIT @1,@2", text2, (num - 1) * 5, 5);
 			}
 			using (queryResult2)
 			{
-				args.Player.SendInfoMessage("Item Drop Log - v{0} - by IcyTerraria", new object[]
-				{
-					Version
-				});
-				args.Player.SendInfoMessage("Results for {0}:", new object[]
-				{
-					text2
-				});
+				args.Player.SendInfoMessage("Results for {0}:", text2);
 				int num2 = (num - 1) * 5;
 				DateTime now = DateTime.Now;
 				while (queryResult2.Read())
 				{
 					Item itemById = TShock.Utils.GetItemById(queryResult2.Get<int>("ItemNetId"));
-                    string s = queryResult2.Get<string>("Timestamp");
-                    string text3 = queryResult2.Get<string>("ServerName");
-                    string text4 = queryResult2.Get<string>("SourcePlayerName");
-                    string text5 = queryResult2.Get<string>("TargetPlayerName");
-                    string value = queryResult2.Get<string>("ItemName");
-                    int num3 = queryResult2.Get<int>("ItemStack");
-                    string text6 = queryResult2.Get<string>("ItemPrefix");
-                    StringBuilder stringBuilder = new StringBuilder();
-                    if (text6 != "None")
-                    {
+					string s = queryResult2.Get<string>("Timestamp");
+					string text3 = queryResult2.Get<string>("ServerName");
+					string text4 = queryResult2.Get<string>("SourcePlayerName");
+					string text5 = queryResult2.Get<string>("TargetPlayerName");
+					string value = queryResult2.Get<string>("ItemName");
+					int num3 = queryResult2.Get<int>("ItemStack");
+					string text6 = queryResult2.Get<string>("ItemPrefix");
+					StringBuilder stringBuilder = new StringBuilder();
+					if (text6 != "None")
+					{
 						stringBuilder.Append(text6).Append(' ');
 					}
 					stringBuilder.Append(value);
@@ -355,23 +349,16 @@ namespace ItemDropLog
 					}
 					DateTime d = DateTime.Parse(s);
 					TimeSpan span = now - d;
-					args.Player.SendInfoMessage("{0}. {1} received {2} from {3}{4} ({5} ago)", new object[]
-					{
-						++num2,
-                        text5,
-						stringBuilder.ToString(),
-                        text4,
-						text7,
-						TimeSpanToDurationString(span)
-					});
+					args.Player.SendInfoMessage("{0}. {1} received {2} from {3}{4} ({5} ago)", ++num2,text5, stringBuilder.ToString(), text4, text7, this.TimeSpanToDurationString(span));
 				}
 			}
 		}
+
 		private void PlayerItemHistoryGive(CommandArgs args)
 		{
 			if (args.Parameters.Count == 0)
 			{
-				args.Player.SendErrorMessage("Invalid syntax! Proper syntax: /pihg <player> [page] [item id/name]");
+				args.Player.SendErrorMessage("Invalid syntax! Proper syntax: /lg <player> [page] [item id/name]");
 				return;
 			}
 			string text = args.Parameters[0];
@@ -379,10 +366,7 @@ namespace ItemDropLog
 			string text2;
 			if (list.Count == 0)
 			{
-				using (QueryResult queryResult = DbExt.QueryReader(DB, "SELECT COUNT(*) AS `Count` FROM `ItemLog` WHERE `SourcePlayerName`=@0", new object[]
-				{
-					text
-				}))
+				using (QueryResult queryResult = db.QueryReader("SELECT COUNT(*) AS `Count` FROM `ItemLog` WHERE `SourcePlayerName`=@0", text))
 				{
 					if (!queryResult.Read() || queryResult.Get<int>("Count") <= 0)
 					{
@@ -396,10 +380,11 @@ namespace ItemDropLog
 			{
 				text2 = list[0].Name;
 			}
-			TShock.Utils.SendMultipleMatchError(args.Player, 
-				from p in list
-				select p.Name);
-			return;
+			else
+			{
+				TShock.Utils.SendMultipleMatchError(args.Player, from p in list select p.Name);
+				return;
+			}
 			int num;
 			if (args.Parameters.Count < 2 || !int.TryParse(args.Parameters[1], out num) || num < 0)
 			{
@@ -416,9 +401,8 @@ namespace ItemDropLog
 				}
 				if (itemByIdOrName.Count > 1)
 				{
-					TShock.Utils.SendMultipleMatchError(args.Player, 
-						from x in itemByIdOrName
-						select x.name);
+					TShock.Utils.SendMultipleMatchError(args.Player, from x in itemByIdOrName
+					select x.name);
 					return;
 				}
 				item = itemByIdOrName[0];
@@ -426,48 +410,30 @@ namespace ItemDropLog
 			QueryResult queryResult2;
 			if (item != null)
 			{
-				queryResult2 = DbExt.QueryReader(DB, "SELECT * FROM `ItemLog` WHERE `SourcePlayerName`=@0 AND `ItemNetId`=@1 ORDER BY `Timestamp` DESC LIMIT @2,@3", new object[]
-				{
-					text2,
-					item.netID,
-					(num - 1) * 5,
-					5
-				});
+				queryResult2 = db.QueryReader("SELECT * FROM `ItemLog` WHERE `SourcePlayerName`=@0 AND `ItemNetId`=@1 ORDER BY `Timestamp` DESC LIMIT @2,@3", text2, item.netID, (num - 1) * 5, 5);
 			}
 			else
 			{
-				queryResult2 = DbExt.QueryReader(DB, "SELECT * FROM `ItemLog` WHERE `SourcePlayerName`=@0 ORDER BY `Timestamp` DESC LIMIT @1,@2", new object[]
-				{
-					text2,
-					(num - 1) * 5,
-					5
-				});
+				queryResult2 = db.QueryReader("SELECT * FROM `ItemLog` WHERE `SourcePlayerName`=@0 ORDER BY `Timestamp` DESC LIMIT @1,@2", text2, (num - 1) * 5, 5);
 			}
 			using (queryResult2)
 			{
-				args.Player.SendInfoMessage("Item Drop Log - v{0} - by IcyTerraria", new object[]
-				{
-					Version
-				});
-				args.Player.SendInfoMessage("Results for {0}:", new object[]
-				{
-					text2
-				});
+				args.Player.SendInfoMessage("Results for {0}:", text2);
 				int num2 = (num - 1) * 5;
 				DateTime now = DateTime.Now;
 				while (queryResult2.Read())
 				{
 					Item itemById = TShock.Utils.GetItemById(queryResult2.Get<int>("ItemNetId"));
-                    string s = queryResult2.Get<string>("Timestamp");
-                    string text3 = queryResult2.Get<string>("ServerName");
-                    string text4 = queryResult2.Get<string>("SourcePlayerName");
-                    string text5 = queryResult2.Get<string>("TargetPlayerName");
-                    string value = queryResult2.Get<string>("ItemName");
-                    int num3 = queryResult2.Get<int>("ItemStack");
-                    string text6 = queryResult2.Get<string>("ItemPrefix");
-                    StringBuilder stringBuilder = new StringBuilder();
-                    if (text6 != "None")
-                    {
+					string s = queryResult2.Get<string>("Timestamp");
+					string text3 = queryResult2.Get<string>("ServerName");
+					string text4 = queryResult2.Get<string>("SourcePlayerName");
+					string text5 = queryResult2.Get<string>("TargetPlayerName");
+					string value = queryResult2.Get<string>("ItemName");
+					int num3 = queryResult2.Get<int>("ItemStack");
+					string text6 = queryResult2.Get<string>("ItemPrefix");
+					StringBuilder stringBuilder = new StringBuilder();
+					if (text6 != "None")
+					{
 						stringBuilder.Append(text6).Append(' ');
 					}
 					stringBuilder.Append(value);
@@ -482,28 +448,22 @@ namespace ItemDropLog
 					}
 					DateTime d = DateTime.Parse(s);
 					TimeSpan span = now - d;
-					args.Player.SendInfoMessage("{0}. {1} gave {2} to {3}{4} ({5} ago)", new object[]
-					{
-						++num2,
-                        text4,
-						stringBuilder.ToString(),
-                        text5,
-						text7,
-						TimeSpanToDurationString(span)
-					});
+					args.Player.SendInfoMessage("{0}. {1} gave {2} to {3}{4} ({5} ago)", ++num2, text4, stringBuilder.ToString(), text5, text7, this.TimeSpanToDurationString(span));
 				}
 			}
 		}
+
 		private void PlayerItemHistoryReload(CommandArgs args)
 		{
-			LoadConfig(ItemDropLogPlugin.ConfigPath);
+			this.LoadConfig(ConfigPath);
 			args.Player.SendInfoMessage("PlayerItemHistory config reloaded.");
 		}
+
 		private void PlayerItemHistoryFlush(CommandArgs args)
 		{
 			if (args.Parameters.Count == 0)
 			{
-				args.Player.SendErrorMessage("Invalid syntax! Proper syntax: /pihflush <days>");
+				args.Player.SendErrorMessage("Invalid syntax! Proper syntax: /lflush <days>");
 				return;
 			}
 			int num;
@@ -513,7 +473,7 @@ namespace ItemDropLog
 				return;
 			}
 			DateTime dateTime = DateTime.Now.AddDays((double)(-(double)num));
-			int num2 = DbExt.Query(DB, "DELETE FROM `ItemLog` WHERE `Timestamp`<@0 AND `ServerName`=@1", new object[]
+			int num2 = db.Query("DELETE FROM `ItemLog` WHERE `Timestamp`<@0 AND `ServerName`=@1", new object[]
 			{
 				dateTime.ToString("s"),
 				TShock.Config.ServerName
@@ -523,6 +483,7 @@ namespace ItemDropLog
 				num2
 			});
 		}
+
 		private string TimeSpanToDurationString(TimeSpan span)
 		{
 			int days = span.Days;
@@ -548,6 +509,7 @@ namespace ItemDropLog
 			}
 			return string.Join(" ", list);
 		}
+
 		private string GetPrefixName(int pre)
 		{
 			string result = "None";
@@ -557,42 +519,45 @@ namespace ItemDropLog
 			}
 			return result;
 		}
+
 		private void SetupConfig()
 		{
 			try
 			{
-				if (File.Exists(ItemDropLogPlugin.ConfigPath))
+				if (File.Exists(ConfigPath))
 				{
-					LoadConfig(ItemDropLogPlugin.ConfigPath);
+					this.LoadConfig(ConfigPath);
 				}
 				else
 				{
 					TShock.Log.ConsoleError("ItemDropLog configuration not found. Using default configuration.");
-					LoadConfig(null);
-					Config.SaveInstance(ItemDropLogPlugin.ConfigPath);
+					this.LoadConfig(null);
+					Config.SaveInstance(ConfigPath);
 				}
 			}
 			catch (Exception ex)
 			{
-                TShock.Log.ConsoleError(ex.ToString());
+				TShock.Log.ConsoleError(ex.ToString());
 			}
 		}
+
 		private void LoadConfig(string path)
 		{
 			Config.CreateInstance(path);
-			_ignoredItems.Clear();
+			this._ignoredItems.Clear();
 			foreach (string current in Config.Instance.IgnoredItems)
 			{
 				List<Item> itemByIdOrName = TShock.Utils.GetItemByIdOrName(current);
 				if (itemByIdOrName.Count > 0)
 				{
-					_ignoredItems.Add(itemByIdOrName[0]);
+					this._ignoredItems.Add(itemByIdOrName[0]);
 				}
 			}
 		}
+
 		private bool CheckItem(Item item)
 		{
-			return _ignoredItems.All((Item x) => x.netID != item.netID);
+			return this._ignoredItems.All((Item x) => x.netID != item.netID);
 		}
 	}
 }
