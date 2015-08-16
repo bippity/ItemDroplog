@@ -456,7 +456,7 @@ namespace ItemDropLog
 		private void PlayerItemHistoryReload(CommandArgs args)
 		{
 			this.LoadConfig(ConfigPath);
-			args.Player.SendInfoMessage("PlayerItemHistory config reloaded.");
+			args.Player.SendInfoMessage("ItemDropLog config reloaded.");
 		}
 
 		private void PlayerItemHistoryFlush(CommandArgs args)
