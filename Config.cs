@@ -61,7 +61,7 @@ namespace ItemDropLog
 			{
 				using (StreamWriter streamWriter = new StreamWriter(stream))
 				{
-					string value = JsonConvert.SerializeObject(Config.instance, 1);
+					string value = JsonConvert.SerializeObject(Config.instance);
 					streamWriter.WriteLine(value);
 				}
 			}

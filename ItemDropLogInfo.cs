@@ -22,7 +22,7 @@ namespace ItemDropLog
 		{
 			get
 			{
-				return !string.IsNullOrEmpty(this.ServerName) && !string.IsNullOrEmpty(this.Action) && !string.IsNullOrEmpty(this.SourcePlayerName) && !string.IsNullOrEmpty(this.TargetPlayerName) && this.ItemNetId != 0;
+				return !string.IsNullOrEmpty(ServerName) && !string.IsNullOrEmpty(Action) && !string.IsNullOrEmpty(SourcePlayerName) && !string.IsNullOrEmpty(TargetPlayerName) && ItemNetId != 0;
 			}
 		}
 		public ItemDropLogInfo(string action, string sourcePlayerName, string targetPlayerName, int itemNetId, int itemStack, int itemPrefix)
@@ -31,25 +31,25 @@ namespace ItemDropLog
 		}
 		public ItemDropLogInfo(string action, string sourcePlayerName, string targetPlayerName, int itemNetId, int itemStack, int itemPrefix, float dropX, float dropY)
 		{
-			this.Timestamp = DateTime.Now;
-			this.ServerName = TShock.get_Config().ServerName;
-			this.SourcePlayerName = sourcePlayerName;
-			this.SourceIP = string.Empty;
-			this.TargetPlayerName = targetPlayerName;
-			this.TargetIP = string.Empty;
-			this.Action = action;
-			this.ItemNetId = itemNetId;
-			this.ItemName = string.Empty;
-			this.ItemStack = itemStack;
-			this.ItemPrefix = "None";
-			this.DropX = dropX;
-			this.DropY = dropY;
+			Timestamp = DateTime.Now;
+			ServerName = TShock.Config.ServerName;
+			SourcePlayerName = sourcePlayerName;
+			SourceIP = string.Empty;
+			TargetPlayerName = targetPlayerName;
+			TargetIP = string.Empty;
+			Action = action;
+			ItemNetId = itemNetId;
+			ItemName = string.Empty;
+			ItemStack = itemStack;
+			ItemPrefix = "None";
+			DropX = dropX;
+			DropY = dropY;
 			if (itemNetId != 0)
 			{
-				this.ItemName = this.GetItemName(itemNetId);
+				ItemName = GetItemName(itemNetId);
 				if (itemPrefix != 0)
 				{
-					this.ItemPrefix = this.GetPrefixName(itemPrefix);
+					ItemPrefix = GetPrefixName(itemPrefix);
 				}
 			}
 		}
