@@ -32,6 +32,7 @@ namespace ItemDropLog
 				"Copper Coin",
 				"Silver Coin",
 				"Gold Coin",
+				"Platinum Coin",
 				"Heart",
 				"Candy Apple",
 				"Candy Cane",
