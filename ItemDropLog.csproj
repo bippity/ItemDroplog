@@ -33,25 +33,22 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Mono.Data.Sqlite">
-      <HintPath>..\Reference\Mono.Data.Sqlite.dll</HintPath>
+      <HintPath>..\..\..\tshock-4.3.8-rel\ServerPlugins\Mono.Data.Sqlite.dll</HintPath>
     </Reference>
     <Reference Include="MySql.Data">
-      <HintPath>..\Reference\MySql.Data.dll</HintPath>
-    </Reference>
-    <Reference Include="MySql.Web">
-      <HintPath>..\Reference\MySql.Web.dll</HintPath>
+      <HintPath>..\..\..\tshock-4.3.8-rel\ServerPlugins\MySql.Data.dll</HintPath>
     </Reference>
     <Reference Include="Newtonsoft.Json">
-      <HintPath>..\Reference\Newtonsoft.Json.dll</HintPath>
+      <HintPath>..\..\..\tshock-4.3.8-rel\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Data" />
     <Reference Include="System.Core" />
     <Reference Include="TerrariaServer">
-      <HintPath>..\Reference\TerrariaServer.exe</HintPath>
+      <HintPath>..\..\..\tshock-4.3.8-rel\TerrariaServer.exe</HintPath>
     </Reference>
     <Reference Include="TShockAPI">
-      <HintPath>..\Reference\TShockAPI.dll</HintPath>
+      <HintPath>..\..\..\tshock-4.3.8-rel\ServerPlugins\TShockAPI.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>

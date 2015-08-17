@@ -28,7 +28,7 @@ namespace ItemDropLog
 
 		private IList<Item> _ignoredItems;
 
-
+        public static IDbConnection db;
 
 
 		public override string Author
@@ -59,7 +59,7 @@ namespace ItemDropLog
 		{
 			get
 			{
-				return new Version(0, 7, 5);
+				return new Version(0, 7, 6);
 			}
 		}
 
@@ -70,8 +70,6 @@ namespace ItemDropLog
 				return TShock.SavePath;
 			}
 		}
-
-		internal static IDbConnection db;
 
 
 		public ItemDropLogPlugin(Main game) : base(game)
@@ -99,6 +97,7 @@ namespace ItemDropLog
 				ServerApi.Hooks.GamePostInitialize.Deregister(this, OnPostInitialize);
 				ServerApi.Hooks.NetGetData.Deregister(this, OnGetData);
 				ServerApi.Hooks.NetSendData.Deregister(this, OnSendData);
+                db.Dispose();
 			}
 			base.Dispose(disposing);
 		}
@@ -113,28 +112,24 @@ namespace ItemDropLog
 			switch (TShock.Config.StorageType.ToLower())
 			{
 				case "mysql":
-					{
-						string[] dbHost = TShock.Config.MySqlHost.Split(':');
-						db = new MySqlConnection()
+						string[] host = TShock.Config.MySqlHost.Split(':');
+                        db = new MySqlConnection()
 						{
 							ConnectionString = string.Format("Server={0}; Port={1}; Database={2}; Uid={3}; Pwd={4};",
-									dbHost[0],
-									dbHost.Length == 1 ? "3306" : dbHost[1],
+									host[0],
+									host.Length == 1 ? "3306" : host[1],
 									TShock.Config.MySqlDbName,
 									TShock.Config.MySqlUsername,
 									TShock.Config.MySqlPassword)
 						};
 						break;
-					}
 				case "sqlite":
-					{
-						string sql = Path.Combine(TShock.SavePath, "ItemLog.sqlite");
-						db = new SqliteConnection(string.Format("uri=file://{0},Version=3", sql));
-						break;
-					}
+					string sql = Path.Combine(TShock.SavePath, "ItemLog.sqlite");
+                    db = new SqliteConnection(string.Format("uri=file://{0},Version=3", sql));
+					break;
+					
 			}
-			SqlTableCreator sqlcreator = new SqlTableCreator(db, db.GetSqlType() == SqlType.Sqlite ? (IQueryBuilder)new SqliteQueryCreator() : new MysqlQueryCreator());
-
+            SqlTableCreator sqlcreator = new SqlTableCreator(db, db.GetSqlType() == SqlType.Sqlite ? (IQueryBuilder)new SqliteQueryCreator() : new MysqlQueryCreator());
 			sqlcreator.EnsureTableStructure(new SqlTable("ItemLog",
 									new SqlColumn("ID", MySqlDbType.Int32) { Unique = true, Primary = true },
 									new SqlColumn("Timestamp", MySqlDbType.String, 19),
@@ -267,7 +262,7 @@ namespace ItemDropLog
 			string text2;
 			if (list.Count == 0)
 			{
-				using (QueryResult queryResult = db.QueryReader("SELECT COUNT(*) AS `Count` FROM `ItemLog` WHERE `TargetPlayerName`=@0", text))
+                using (QueryResult queryResult = db.QueryReader("SELECT COUNT(*) AS `Count` FROM `ItemLog` WHERE `TargetPlayerName`=@0", text))
 				{
 					if (!queryResult.Read() || queryResult.Get<int>("Count") <= 0)
 					{
@@ -311,11 +306,11 @@ namespace ItemDropLog
 			QueryResult queryResult2;
 			if (item != null)
 			{
-				queryResult2 = db.QueryReader("SELECT * FROM `ItemLog` WHERE `TargetPlayerName`=@0 AND `ItemNetId`=@1 ORDER BY `Timestamp` DESC LIMIT @2,@3", text2, item.netID, (num - 1) * 5, 5);
+                queryResult2 = db.QueryReader("SELECT * FROM `ItemLog` WHERE `TargetPlayerName`=@0 AND `ItemNetId`=@1 ORDER BY `Timestamp` DESC LIMIT @2,@3", text2, item.netID, (num - 1) * 5, 5);
 			}
 			else
 			{
-				queryResult2 = db.QueryReader("SELECT * FROM `ItemLog` WHERE `TargetPlayerName`=@0 ORDER BY `Timestamp` DESC LIMIT @1,@2", text2, (num - 1) * 5, 5);
+                queryResult2 = db.QueryReader("SELECT * FROM `ItemLog` WHERE `TargetPlayerName`=@0 ORDER BY `Timestamp` DESC LIMIT @1,@2", text2, (num - 1) * 5, 5);
 			}
 			using (queryResult2)
 			{
@@ -366,7 +361,7 @@ namespace ItemDropLog
 			string text2;
 			if (list.Count == 0)
 			{
-				using (QueryResult queryResult = db.QueryReader("SELECT COUNT(*) AS `Count` FROM `ItemLog` WHERE `SourcePlayerName`=@0", text))
+                using (QueryResult queryResult = db.QueryReader("SELECT COUNT(*) AS `Count` FROM `ItemLog` WHERE `SourcePlayerName`=@0", text))
 				{
 					if (!queryResult.Read() || queryResult.Get<int>("Count") <= 0)
 					{
@@ -410,11 +405,11 @@ namespace ItemDropLog
 			QueryResult queryResult2;
 			if (item != null)
 			{
-				queryResult2 = db.QueryReader("SELECT * FROM `ItemLog` WHERE `SourcePlayerName`=@0 AND `ItemNetId`=@1 ORDER BY `Timestamp` DESC LIMIT @2,@3", text2, item.netID, (num - 1) * 5, 5);
+                queryResult2 = db.QueryReader("SELECT * FROM `ItemLog` WHERE `SourcePlayerName`=@0 AND `ItemNetId`=@1 ORDER BY `Timestamp` DESC LIMIT @2,@3", text2, item.netID, (num - 1) * 5, 5);
 			}
 			else
 			{
-				queryResult2 = db.QueryReader("SELECT * FROM `ItemLog` WHERE `SourcePlayerName`=@0 ORDER BY `Timestamp` DESC LIMIT @1,@2", text2, (num - 1) * 5, 5);
+                queryResult2 = db.QueryReader("SELECT * FROM `ItemLog` WHERE `SourcePlayerName`=@0 ORDER BY `Timestamp` DESC LIMIT @1,@2", text2, (num - 1) * 5, 5);
 			}
 			using (queryResult2)
 			{
@@ -473,7 +468,7 @@ namespace ItemDropLog
 				return;
 			}
 			DateTime dateTime = DateTime.Now.AddDays((double)(-(double)num));
-			int num2 = db.Query("DELETE FROM `ItemLog` WHERE `Timestamp`<@0 AND `ServerName`=@1", new object[]
+            int num2 = db.Query("DELETE FROM `ItemLog` WHERE `Timestamp`<@0 AND `ServerName`=@1", new object[]
 			{
 				dateTime.ToString("s"),
 				TShock.Config.ServerName

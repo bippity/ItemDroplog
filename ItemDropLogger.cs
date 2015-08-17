@@ -7,6 +7,7 @@ namespace ItemDropLog
 {
 	public static class ItemDropLogger
 	{
+        
 		public static void CreateEntry(ItemDropLogInfo info)
 		{
 			if (!info.IsValid)
@@ -14,7 +15,7 @@ namespace ItemDropLog
 				TShock.Log.ConsoleError("ItemDropLogger tried to create an entry based on invalid info.");
 				return;
 			}
-			ItemDropLogPlugin.db.Query("INSERT INTO `ItemLog` (`Timestamp`,`ServerName`,`SourcePlayerName`,`SourceIP`,`TargetPlayerName`,`TargetIP`,`Action`,`DropX`,`DropY`,`ItemNetId`,`ItemName`,`ItemStack`,`ItemPrefix`) VALUES (@0,@1,@2,@3,@4,@5,@6,@7,@8,@9,@10,@11,@12)", new object[]
+            ItemDropLogPlugin.db.Query("INSERT INTO `ItemLog` (`Timestamp`,`ServerName`,`SourcePlayerName`,`SourceIP`,`TargetPlayerName`,`TargetIP`,`Action`,`DropX`,`DropY`,`ItemNetId`,`ItemName`,`ItemStack`,`ItemPrefix`) VALUES (@0,@1,@2,@3,@4,@5,@6,@7,@8,@9,@10,@11,@12)", new object[]
 			{
 				info.Timestamp.ToString("s"),
 				info.ServerName,
