@@ -131,7 +131,7 @@ namespace ItemDropLog
 			}
             SqlTableCreator sqlcreator = new SqlTableCreator(db, db.GetSqlType() == SqlType.Sqlite ? (IQueryBuilder)new SqliteQueryCreator() : new MysqlQueryCreator());
 			sqlcreator.EnsureTableStructure(new SqlTable("ItemLog",
-									new SqlColumn("ID", MySqlDbType.Int32) { Unique = true, Primary = true },
+									new SqlColumn("ID", MySqlDbType.Int32) { Unique = true, Primary = true, AutoIncrement = true },
 									new SqlColumn("Timestamp", MySqlDbType.String, 19),
 									new SqlColumn("ServerName", MySqlDbType.String, 64),
 									new SqlColumn("SourcePlayerName", MySqlDbType.String, 30),
