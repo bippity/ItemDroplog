@@ -6,6 +6,7 @@ using System.Data;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 using Terraria;
 using TerrariaApi.Server;
 using TShockAPI;
@@ -21,8 +22,6 @@ namespace ItemDropLog
 		private object _dropLocker;
 
 		private ItemDrop[] _drops;
-
-		private object _pendingLocker;
 
 		private IList<ItemDrop> _playerDropsPending;
 
@@ -59,7 +58,7 @@ namespace ItemDropLog
 		{
 			get
 			{
-				return new Version(0, 7, 6);
+				return new Version(1, 1, 1);
 			}
 		}
 
@@ -76,7 +75,6 @@ namespace ItemDropLog
 		{
 			this._dropLocker = new object();
 			this._drops = new ItemDrop[Main.item.Length];
-			this._pendingLocker = new object();
 			this._playerDropsPending = new List<ItemDrop>(Main.item.Length);
 			this._ignoredItems = new List<Item>();
 		}
@@ -153,7 +151,7 @@ namespace ItemDropLog
 			this.SetupConfig();
 		}
 
-		private void OnGetData(GetDataEventArgs args)
+		private async void OnGetData(GetDataEventArgs args)
 		{
 			if ((int)args.MsgID == (int)PacketTypes.ItemDrop)
 			{
@@ -179,18 +177,15 @@ namespace ItemDropLog
 							{
 								':'
 							})[0];
-							lock (this._pendingLocker)
+							float dropX = num2 / 16f;
+							float dropY = num3 / 16f;
+							this._playerDropsPending.Add(new ItemDrop(name, itemById.netID, num4, num5, dropX, dropY));
+							if (this.CheckItem(itemById))
 							{
-								float dropX = num2 / 16f;
-								float dropY = num3 / 16f;
-								this._playerDropsPending.Add(new ItemDrop(name, itemById.netID, num4, num5, dropX, dropY));
-								if (this.CheckItem(itemById))
-								{
-									ItemDropLogger.CreateItemEntry(new ItemDropLogInfo("PlayerDrop", name, string.Empty, itemById.netID, num4, num5, dropX, dropY)
-									{
-										SourceIP = sourceIP
-									});
-								}
+                                ItemDropLogger.CreateItemEntryAsync(new ItemDropLogInfo("PlayerDrop", name, string.Empty, itemById.netID, num4, num5, dropX, dropY)
+                                {
+                                    SourceIP = sourceIP
+                                });
 							}
 						}
 						if (num < 400 && num6 == 0)
@@ -203,20 +198,17 @@ namespace ItemDropLog
 								{
 									':'
 								})[0];
-								lock (this._dropLocker)
+								ItemDrop itemDrop = this._drops[num];
+								if (this._drops[num] != null && this._drops[num].NetworkId != 0)
 								{
-									ItemDrop itemDrop = this._drops[num];
-									if (this._drops[num] != null && this._drops[num].NetworkId != 0)
+									if (this.CheckItem(item))
 									{
-										if (this.CheckItem(item))
+										ItemDropLogger.UpdateItemEntryAsync(new ItemDropLogInfo("Pickup", itemDrop.SourceName, name2, itemDrop.NetworkId, itemDrop.Stack, (int)itemDrop.Prefix)
 										{
-											ItemDropLogger.UpdateItemEntry(new ItemDropLogInfo("Pickup", itemDrop.SourceName, name2, itemDrop.NetworkId, itemDrop.Stack, (int)itemDrop.Prefix)
-											{
-												TargetIP = targetIP
-											});
-										}
-										this._drops[num] = null;
+											TargetIP = targetIP
+										});
 									}
+									this._drops[num] = null;
 								}
 							}
 						}
@@ -238,214 +230,220 @@ namespace ItemDropLog
 				ItemDrop itemDrop = this._playerDropsPending.FirstOrDefault((ItemDrop x) => x.NetworkId == item.netID && x.Stack == item.stack && x.Prefix == item.prefix);
 				if (itemDrop != null)
 				{
-					lock (this._dropLocker)
-					{
-						this._drops[number] = itemDrop;
-					}
-					lock (this._pendingLocker)
-					{
-						this._playerDropsPending.Remove(itemDrop);
-					}
+					this._drops[number] = itemDrop;
+					this._playerDropsPending.Remove(itemDrop);
 				}
 			}
 		}
 
-		private void PlayerItemHistoryReceive(CommandArgs args)
+		private async void PlayerItemHistoryReceive(CommandArgs args)
 		{
-			if (args.Parameters.Count == 0)
-			{
-				args.Player.SendErrorMessage("Invalid syntax! Proper syntax: /lr <player> [page] [item id/name]");
-				return;
-			}
-			string text = args.Parameters[0];
-			List<TSPlayer> list = TShock.Utils.FindPlayer(text);
-			string text2;
-			if (list.Count == 0)
-			{
-                using (QueryResult queryResult = db.QueryReader("SELECT COUNT(*) AS `Count` FROM `ItemLog` WHERE `TargetPlayerName`=@0", text))
-				{
-					if (!queryResult.Read() || queryResult.Get<int>("Count") <= 0)
-					{
-						args.Player.SendErrorMessage("Invalid player!");
-						return;
-					}
-				}
-				text2 = text;
-			}
-			if (list.Count <= 1)
-			{
-				text2 = list[0].Name;
-			}
-			else
-			{
-				TShock.Utils.SendMultipleMatchError(args.Player, from p in list select p.Name);
-				return;
-			}
-			int num;
-			if (args.Parameters.Count < 2 || !int.TryParse(args.Parameters[1], out num) || num < 0)
-			{
-				num = 1;
-			}
-			Item item = null;
-			if (args.Parameters.Count >= 3)
-			{
-				List<Item> itemByIdOrName = TShock.Utils.GetItemByIdOrName(args.Parameters[2]);
-				if (itemByIdOrName.Count == 0)
-				{
-					args.Player.SendErrorMessage("Invalid item!");
-					return;
-				}
-				if (itemByIdOrName.Count > 1)
-				{
-					TShock.Utils.SendMultipleMatchError(args.Player, from x in itemByIdOrName
-					select x.name);
-					return;
-				}
-				item = itemByIdOrName[0];
-			}
-			QueryResult queryResult2;
-			if (item != null)
-			{
-                queryResult2 = db.QueryReader("SELECT * FROM `ItemLog` WHERE `TargetPlayerName`=@0 AND `ItemNetId`=@1 ORDER BY `Timestamp` DESC LIMIT @2,@3", text2, item.netID, (num - 1) * 5, 5);
-			}
-			else
-			{
-                queryResult2 = db.QueryReader("SELECT * FROM `ItemLog` WHERE `TargetPlayerName`=@0 ORDER BY `Timestamp` DESC LIMIT @1,@2", text2, (num - 1) * 5, 5);
-			}
-			using (queryResult2)
-			{
-				args.Player.SendInfoMessage("Results for {0}:", text2);
-				int num2 = (num - 1) * 5;
-				DateTime now = DateTime.Now;
-				while (queryResult2.Read())
-				{
-					Item itemById = TShock.Utils.GetItemById(queryResult2.Get<int>("ItemNetId"));
-					string s = queryResult2.Get<string>("Timestamp");
-					string text3 = queryResult2.Get<string>("ServerName");
-					string text4 = queryResult2.Get<string>("SourcePlayerName");
-					string text5 = queryResult2.Get<string>("TargetPlayerName");
-					string value = queryResult2.Get<string>("ItemName");
-					int num3 = queryResult2.Get<int>("ItemStack");
-					string text6 = queryResult2.Get<string>("ItemPrefix");
-					StringBuilder stringBuilder = new StringBuilder();
-					if (text6 != "None")
-					{
-						stringBuilder.Append(text6).Append(' ');
-					}
-					stringBuilder.Append(value);
-					if (itemById.maxStack > 1)
-					{
-						stringBuilder.Append(' ').AppendFormat("({0}/{1})", num3, itemById.maxStack);
-					}
-					string text7 = string.Empty;
-					if (!string.IsNullOrEmpty(text3))
-					{
-						text7 = " on " + text3;
-					}
-					DateTime d = DateTime.Parse(s);
-					TimeSpan span = now - d;
-					args.Player.SendInfoMessage("{0}. {1} received {2} from {3}{4} ({5} ago)", ++num2,text5, stringBuilder.ToString(), text4, text7, this.TimeSpanToDurationString(span));
-				}
-			}
+            if (args.Parameters.Count == 0)
+            {
+                args.Player.SendErrorMessage("Invalid syntax! Proper syntax: /lr <player> [page] [item id/name]");
+                return;
+            }
+            string text = args.Parameters[0];
+            List<TSPlayer> list = TShock.Utils.FindPlayer(text);
+            string text2;
+            if (list.Count == 0)
+            {
+                await Task.Run(() =>
+                {
+                    using (QueryResult queryResult = db.QueryReader("SELECT COUNT(*) AS `Count` FROM `ItemLog` WHERE `TargetPlayerName`=@0", text))
+                    {
+                        if (!queryResult.Read() || queryResult.Get<int>("Count") <= 0)
+                        {
+                            args.Player.SendErrorMessage("Invalid player!");
+                            return;
+                        }
+                    }
+                });
+                text2 = text;
+            }
+            if (list.Count <= 1)
+            {
+                text2 = list[0].Name;
+            }
+            else
+            {
+                TShock.Utils.SendMultipleMatchError(args.Player, from p in list select p.Name);
+                return;
+            }
+            int num;
+            if (args.Parameters.Count < 2 || !int.TryParse(args.Parameters[1], out num) || num < 0)
+            {
+                num = 1;
+            }
+            Item item = null;
+            if (args.Parameters.Count >= 3)
+            {
+                List<Item> itemByIdOrName = TShock.Utils.GetItemByIdOrName(args.Parameters[2]);
+                if (itemByIdOrName.Count == 0)
+                {
+                    args.Player.SendErrorMessage("Invalid item!");
+                    return;
+                }
+                if (itemByIdOrName.Count > 1)
+                {
+                    TShock.Utils.SendMultipleMatchError(args.Player, from x in itemByIdOrName
+                                                                        select x.name);
+                    return;
+                }
+                item = itemByIdOrName[0];
+            }
+            await Task.Run(() =>
+            {
+                QueryResult queryResult2;
+                if (item != null)
+                {
+                    queryResult2 = db.QueryReader("SELECT * FROM `ItemLog` WHERE `TargetPlayerName`=@0 AND `ItemNetId`=@1 ORDER BY `Timestamp` DESC LIMIT @2,@3", text2, item.netID, (num - 1) * 5, 5);
+                }
+                else
+                {
+                    queryResult2 = db.QueryReader("SELECT * FROM `ItemLog` WHERE `TargetPlayerName`=@0 ORDER BY `Timestamp` DESC LIMIT @1,@2", text2, (num - 1) * 5, 5);
+                }
+                using (queryResult2)
+                {
+                    args.Player.SendInfoMessage("Results for {0}:", text2);
+                    int num2 = (num - 1) * 5;
+                    DateTime now = DateTime.Now;
+                    while (queryResult2.Read())
+                    {
+                        Item itemById = TShock.Utils.GetItemById(queryResult2.Get<int>("ItemNetId"));
+                        string s = queryResult2.Get<string>("Timestamp");
+                        string text3 = queryResult2.Get<string>("ServerName");
+                        string text4 = queryResult2.Get<string>("SourcePlayerName");
+                        string text5 = queryResult2.Get<string>("TargetPlayerName");
+                        string value = queryResult2.Get<string>("ItemName");
+                        int num3 = queryResult2.Get<int>("ItemStack");
+                        string text6 = queryResult2.Get<string>("ItemPrefix");
+                        StringBuilder stringBuilder = new StringBuilder();
+                        if (text6 != "None")
+                        {
+                            stringBuilder.Append(text6).Append(' ');
+                        }
+                        stringBuilder.Append(value);
+                        if (itemById.maxStack > 1)
+                        {
+                            stringBuilder.Append(' ').AppendFormat("({0}/{1})", num3, itemById.maxStack);
+                        }
+                        string text7 = string.Empty;
+                        if (!string.IsNullOrEmpty(text3))
+                        {
+                            text7 = " on " + text3;
+                        }
+                        DateTime d = DateTime.Parse(s);
+                        TimeSpan span = now - d;
+                        args.Player.SendInfoMessage("{0}. {1} received {2} from {3}{4} ({5} ago)", ++num2, text5, stringBuilder.ToString(), text4, text7, this.TimeSpanToDurationString(span));
+                    }
+                }
+            });
 		}
 
-		private void PlayerItemHistoryGive(CommandArgs args)
+		private async void PlayerItemHistoryGive(CommandArgs args)
 		{
-			if (args.Parameters.Count == 0)
-			{
-				args.Player.SendErrorMessage("Invalid syntax! Proper syntax: /lg <player> [page] [item id/name]");
-				return;
-			}
-			string text = args.Parameters[0];
-			List<TSPlayer> list = TShock.Utils.FindPlayer(text);
-			string text2;
-			if (list.Count == 0)
-			{
-                using (QueryResult queryResult = db.QueryReader("SELECT COUNT(*) AS `Count` FROM `ItemLog` WHERE `SourcePlayerName`=@0", text))
-				{
-					if (!queryResult.Read() || queryResult.Get<int>("Count") <= 0)
-					{
-						args.Player.SendErrorMessage("Invalid player!");
-						return;
-					}
-				}
-				text2 = text;
-			}
-			if (list.Count <= 1)
-			{
-				text2 = list[0].Name;
-			}
-			else
-			{
-				TShock.Utils.SendMultipleMatchError(args.Player, from p in list select p.Name);
-				return;
-			}
-			int num;
-			if (args.Parameters.Count < 2 || !int.TryParse(args.Parameters[1], out num) || num < 0)
-			{
-				num = 1;
-			}
-			Item item = null;
-			if (args.Parameters.Count >= 3)
-			{
-				List<Item> itemByIdOrName = TShock.Utils.GetItemByIdOrName(args.Parameters[2]);
-				if (itemByIdOrName.Count == 0)
-				{
-					args.Player.SendErrorMessage("Invalid item!");
-					return;
-				}
-				if (itemByIdOrName.Count > 1)
-				{
-					TShock.Utils.SendMultipleMatchError(args.Player, from x in itemByIdOrName
-					select x.name);
-					return;
-				}
-				item = itemByIdOrName[0];
-			}
-			QueryResult queryResult2;
-			if (item != null)
-			{
-                queryResult2 = db.QueryReader("SELECT * FROM `ItemLog` WHERE `SourcePlayerName`=@0 AND `ItemNetId`=@1 ORDER BY `Timestamp` DESC LIMIT @2,@3", text2, item.netID, (num - 1) * 5, 5);
-			}
-			else
-			{
-                queryResult2 = db.QueryReader("SELECT * FROM `ItemLog` WHERE `SourcePlayerName`=@0 ORDER BY `Timestamp` DESC LIMIT @1,@2", text2, (num - 1) * 5, 5);
-			}
-			using (queryResult2)
-			{
-				args.Player.SendInfoMessage("Results for {0}:", text2);
-				int num2 = (num - 1) * 5;
-				DateTime now = DateTime.Now;
-				while (queryResult2.Read())
-				{
-					Item itemById = TShock.Utils.GetItemById(queryResult2.Get<int>("ItemNetId"));
-					string s = queryResult2.Get<string>("Timestamp");
-					string text3 = queryResult2.Get<string>("ServerName");
-					string text4 = queryResult2.Get<string>("SourcePlayerName");
-					string text5 = queryResult2.Get<string>("TargetPlayerName");
-					string value = queryResult2.Get<string>("ItemName");
-					int num3 = queryResult2.Get<int>("ItemStack");
-					string text6 = queryResult2.Get<string>("ItemPrefix");
-					StringBuilder stringBuilder = new StringBuilder();
-					if (text6 != "None")
-					{
-						stringBuilder.Append(text6).Append(' ');
-					}
-					stringBuilder.Append(value);
-					if (itemById.maxStack > 1)
-					{
-						stringBuilder.Append(' ').AppendFormat("({0}/{1})", num3, itemById.maxStack);
-					}
-					string text7 = string.Empty;
-					if (!string.IsNullOrEmpty(text3))
-					{
-						text7 = " on " + text3;
-					}
-					DateTime d = DateTime.Parse(s);
-					TimeSpan span = now - d;
-					args.Player.SendInfoMessage("{0}. {1} gave {2} to {3}{4} ({5} ago)", ++num2, text4, stringBuilder.ToString(), text5, text7, this.TimeSpanToDurationString(span));
-				}
-			}
+            if (args.Parameters.Count == 0)
+            {
+                args.Player.SendErrorMessage("Invalid syntax! Proper syntax: /lg <player> [page] [item id/name]");
+                return;
+            }
+            string text = args.Parameters[0];
+            List<TSPlayer> list = TShock.Utils.FindPlayer(text);
+            string text2;
+            if (list.Count == 0)
+            {
+                await Task.Run(() =>
+                {
+                    using (QueryResult queryResult = db.QueryReader("SELECT COUNT(*) AS `Count` FROM `ItemLog` WHERE `SourcePlayerName`=@0", text))
+                    {
+                        if (!queryResult.Read() || queryResult.Get<int>("Count") <= 0)
+                        {
+                            args.Player.SendErrorMessage("Invalid player!");
+                            return;
+                        }
+                    }
+                });
+                text2 = text;
+            }
+            if (list.Count <= 1)
+            {
+                text2 = list[0].Name;
+            }
+            else
+            {
+                TShock.Utils.SendMultipleMatchError(args.Player, from p in list select p.Name);
+                return;
+            }
+            int num;
+            if (args.Parameters.Count < 2 || !int.TryParse(args.Parameters[1], out num) || num < 0)
+            {
+                num = 1;
+            }
+            Item item = null;
+            if (args.Parameters.Count >= 3)
+            {
+                List<Item> itemByIdOrName = TShock.Utils.GetItemByIdOrName(args.Parameters[2]);
+                if (itemByIdOrName.Count == 0)
+                {
+                    args.Player.SendErrorMessage("Invalid item!");
+                    return;
+                }
+                if (itemByIdOrName.Count > 1)
+                {
+                    TShock.Utils.SendMultipleMatchError(args.Player, from x in itemByIdOrName
+                                                                        select x.name);
+                    return;
+                }
+                item = itemByIdOrName[0];
+            }
+            await Task.Run(() =>
+            {
+                QueryResult queryResult2;
+                if (item != null)
+                {
+                    queryResult2 = db.QueryReader("SELECT * FROM `ItemLog` WHERE `SourcePlayerName`=@0 AND `ItemNetId`=@1 ORDER BY `Timestamp` DESC LIMIT @2,@3", text2, item.netID, (num - 1) * 5, 5);
+                }
+                else
+                {
+                    queryResult2 = db.QueryReader("SELECT * FROM `ItemLog` WHERE `SourcePlayerName`=@0 ORDER BY `Timestamp` DESC LIMIT @1,@2", text2, (num - 1) * 5, 5);
+                }
+                using (queryResult2)
+                {
+                    args.Player.SendInfoMessage("Results for {0}:", text2);
+                    int num2 = (num - 1) * 5;
+                    DateTime now = DateTime.Now;
+                    while (queryResult2.Read())
+                    {
+                        Item itemById = TShock.Utils.GetItemById(queryResult2.Get<int>("ItemNetId"));
+                        string s = queryResult2.Get<string>("Timestamp");
+                        string text3 = queryResult2.Get<string>("ServerName");
+                        string text4 = queryResult2.Get<string>("SourcePlayerName");
+                        string text5 = queryResult2.Get<string>("TargetPlayerName");
+                        string value = queryResult2.Get<string>("ItemName");
+                        int num3 = queryResult2.Get<int>("ItemStack");
+                        string text6 = queryResult2.Get<string>("ItemPrefix");
+                        StringBuilder stringBuilder = new StringBuilder();
+                        if (text6 != "None")
+                        {
+                            stringBuilder.Append(text6).Append(' ');
+                        }
+                        stringBuilder.Append(value);
+                        if (itemById.maxStack > 1)
+                        {
+                            stringBuilder.Append(' ').AppendFormat("({0}/{1})", num3, itemById.maxStack);
+                        }
+                        string text7 = string.Empty;
+                        if (!string.IsNullOrEmpty(text3))
+                        {
+                            text7 = " on " + text3;
+                        }
+                        DateTime d = DateTime.Parse(s);
+                        TimeSpan span = now - d;
+                        args.Player.SendInfoMessage("{0}. {1} gave {2} to {3}{4} ({5} ago)", ++num2, text4, stringBuilder.ToString(), text5, text7, this.TimeSpanToDurationString(span));
+                    }
+                }
+            });
 		}
 
 		private void PlayerItemHistoryReload(CommandArgs args)
@@ -454,7 +452,7 @@ namespace ItemDropLog
 			args.Player.SendInfoMessage("ItemDropLog config reloaded.");
 		}
 
-		private void PlayerItemHistoryFlush(CommandArgs args)
+		private async void PlayerItemHistoryFlush(CommandArgs args)
 		{
 			if (args.Parameters.Count == 0)
 			{
@@ -468,15 +466,18 @@ namespace ItemDropLog
 				return;
 			}
 			DateTime dateTime = DateTime.Now.AddDays((double)(-(double)num));
-            int num2 = db.Query("DELETE FROM `ItemLog` WHERE `Timestamp`<@0 AND `ServerName`=@1", new object[]
-			{
-				dateTime.ToString("s"),
-				TShock.Config.ServerName
-			});
-			args.Player.SendInfoMessage("Successfully flushed {0:n0} rows from the database.", new object[]
-			{
-				num2
-			});
+            await Task.Run(() =>
+            {
+                int num2 = db.Query("DELETE FROM `ItemLog` WHERE `Timestamp`<@0 AND `ServerName`=@1", new object[]
+                {
+                    dateTime.ToString("s"),
+                    TShock.Config.ServerName
+                });
+                args.Player.SendInfoMessage("Successfully flushed {0:n0} rows from the database.", new object[]
+                {
+                    num2
+                });
+            });
 		}
 
 		private string TimeSpanToDurationString(TimeSpan span)
