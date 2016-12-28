@@ -14,7 +14,7 @@ using TShockAPI.DB;
 
 namespace ItemDropLog
 {
-	[ApiVersion(1, 21)]
+	[ApiVersion(2, 0)]
 	public class ItemDropLogPlugin : TerrariaPlugin
 	{
 		private static readonly string ConfigPath = Path.Combine(TShock.SavePath, "itemdroplog.json");
@@ -142,7 +142,7 @@ namespace ItemDropLog
 									new SqlColumn("ItemNetId", MySqlDbType.Int32),
 									new SqlColumn("ItemName", MySqlDbType.String, 70),
 									new SqlColumn("ItemStack", MySqlDbType.Int32),
-									new SqlColumn("ItemPrefix", MySqlDbType.Int32)
+									new SqlColumn("ItemPrefix", MySqlDbType.String, 30)
 									));
 		}
 
@@ -151,7 +151,7 @@ namespace ItemDropLog
 			this.SetupConfig();
 		}
 
-		private async void OnGetData(GetDataEventArgs args)
+		private void OnGetData(GetDataEventArgs args) //switched back from async bc it doesn't have any await; meaning it's synchronous
 		{
 			if ((int)args.MsgID == (int)PacketTypes.ItemDrop)
 			{
@@ -182,10 +182,10 @@ namespace ItemDropLog
 							this._playerDropsPending.Add(new ItemDrop(name, itemById.netID, num4, num5, dropX, dropY));
 							if (this.CheckItem(itemById))
 							{
-                                ItemDropLogger.CreateItemEntryAsync(new ItemDropLogInfo("PlayerDrop", name, string.Empty, itemById.netID, num4, num5, dropX, dropY)
-                                {
-                                    SourceIP = sourceIP
-                                });
+								ItemDropLogger.CreateItemEntryAsync(new ItemDropLogInfo("PlayerDrop", name, string.Empty, itemById.netID, num4, num5, dropX, dropY)
+								{
+									SourceIP = sourceIP
+								});
 							}
 						}
 						if (num < 400 && num6 == 0)

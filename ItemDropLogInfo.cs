@@ -86,6 +86,7 @@ namespace ItemDropLog
 			if (pre > 0)
 			{
 				result = Lang.prefix[pre];
+				//result = TShock.Utils.GetPrefixById(pre);
 			}
 			return result;
 		}
